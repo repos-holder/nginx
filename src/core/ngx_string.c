@@ -1838,3 +1838,15 @@ ngx_memcpy(void *dst, const void *src, size_t n)
 }
 
 #endif
+
+void
+ngx_strip_chroot(ngx_str_t *path)
+{
+    if (!ngx_strncmp(path->data, NGX_PREFIX, strlen(NGX_PREFIX))) {
+        char *x, *buf = malloc(path->len);
+       x = ngx_cpystrn(buf, path->data + strlen(NGX_PREFIX) - 1,
+                       path->len);
+       path->len = (x - buf);
+       path->data = buf;
+    }
+}

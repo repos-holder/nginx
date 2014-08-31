@@ -49,6 +49,7 @@ sig_atomic_t  ngx_reopen;
 sig_atomic_t  ngx_change_binary;
 ngx_pid_t     ngx_new_binary;
 ngx_uint_t    ngx_inherited;
+ngx_uint_t    ngx_chrooted = 1;
 ngx_uint_t    ngx_daemonized;
 
 sig_atomic_t  ngx_noaccept;
@@ -840,6 +841,8 @@ ngx_worker_process_init(ngx_cycle_t *cycle, ngx_int_t worker)
     uint64_t          cpu_affinity;
     ngx_int_t         n;
     ngx_uint_t        i;
+    struct passwd    *pw;
+    struct stat       stb;
     struct rlimit     rlmt;
     ngx_core_conf_t  *ccf;
     ngx_listening_t  *ls;
@@ -894,6 +897,46 @@ ngx_worker_process_init(ngx_cycle_t *cycle, ngx_int_t worker)
 #endif
 
     if (geteuid() == 0) {
+        if (!ngx_chrooted) {
+            goto nochroot;
+        }
+
+	if ((pw = getpwnam(ccf->username)) == NULL) {
+            ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_errno,
+                          "getpwnam(%s) failed", ccf->username);
+            /* fatal */
+            exit(2);
+	}
+
+	if (stat(pw->pw_dir, &stb) == -1) {
+            ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_errno,
+                          "stat(%s) failed", pw->pw_dir);
+            /* fatal */
+            exit(2);
+	}
+
+	if (stb.st_uid != 0 || (stb.st_mode & (S_IWGRP|S_IWOTH)) != 0) {
+            ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_errno,
+                          "bad privsep dir permissions on %s", pw->pw_dir);
+            /* fatal */
+            exit(2);
+	}
+
+	if (chroot(pw->pw_dir) == -1) {
+            ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_errno,
+                          "chroot(%s) failed", pw->pw_dir);
+            /* fatal */
+            exit(2);
+	}
+
+	if (chdir("/") == -1) {
+            ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_errno,
+                          "chdir(\"/\") failed");
+            /* fatal */
+            exit(2);
+	}
+
+nochroot:
         if (setgid(ccf->group) == -1) {
             ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_errno,
                           "setgid(%d) failed", ccf->group);

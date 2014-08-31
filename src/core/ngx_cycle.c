@@ -85,6 +85,12 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
     cycle->pool = pool;
     cycle->log = log;
     cycle->new_log.log_level = NGX_LOG_ERR;
+#if (NGX_ENABLE_SYSLOG)
+    cycle->new_log.facility = SYSLOG_FACILITY;
+    cycle->new_log.facility = ERR_SYSLOG_PRIORITY;
+    cycle->new_log.syslog_on = 0;
+    cycle->new_log.syslog_set = 0;
+#endif
     cycle->old_cycle = old_cycle;
 
     cycle->conf_prefix.len = old_cycle->conf_prefix.len;
@@ -1132,6 +1138,10 @@ ngx_reopen_files(ngx_cycle_t *cycle, ngx_uid_t user)
             part = part->next;
             file = part->elts;
             i = 0;
+        }
+
+        if ((ngx_process == NGX_PROCESS_WORKER) && ngx_chrooted) {
+            ngx_strip_chroot(&file[i].name);
         }
 
         if (file[i].name.len == 0) {

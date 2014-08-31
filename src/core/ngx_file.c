@@ -478,6 +478,17 @@ ngx_create_paths(ngx_cycle_t *cycle, ngx_uid_t user)
     path = cycle->paths.elts;
     for (i = 0; i < cycle->paths.nelts; i++) {
 
+        if (ngx_chrooted) {
+          if (chdir(NGX_PREFIX) == -1) {
+            ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_errno,
+                          "chdir(\"%s\") failed", NGX_PREFIX);
+            return NGX_ERROR;
+          }
+          ngx_strip_chroot(&path[i]->name);
+          path[i]->name.data++;
+          path[i]->name.len--;
+        }
+
         if (ngx_create_dir(path[i]->name.data, 0700) == NGX_FILE_ERROR) {
             err = ngx_errno;
             if (err != NGX_EEXIST) {

@@ -1,6 +1,7 @@
+.\"	$OpenBSD: nginx.8,v 1.8 2013/07/16 11:13:33 schwarze Exp $
 .\"
-.\" Copyright (C) 2010 Sergey A. Osokin
-.\" Copyright (C) Nginx, Inc.
+.\" Copyright (c) 2010 Sergey A. Osokin
+.\" Copyright (c) 2011,2012 Nginx, Inc.
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -25,15 +26,15 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd March 6, 2012
+.Dd $Mdocdate: July 16 2013 $
 .Dt NGINX 8
 .Os
 .Sh NAME
 .Nm nginx
-.Nd "HTTP and reverse proxy server, mail proxy server"
+.Nd HTTP and reverse proxy server, mail proxy server
 .Sh SYNOPSIS
 .Nm
-.Op Fl ?hqtVv
+.Op Fl ?hqtuVv
 .Op Fl c Ar file
 .Op Fl g Ar directives
 .Op Fl p Ar prefix
@@ -47,8 +48,8 @@ It is known for its high performance, stability, rich feature set, simple
 configuration, and low resource consumption.
 .Pp
 The options are as follows:
-.Bl -tag -width ".Fl d Ar directives"
-.It Fl ?\& , h
+.Bl -tag -width Ds
+.It Fl ?\& | h
 Print help.
 .It Fl c Ar file
 Use an alternative configuration
@@ -70,9 +71,9 @@ The argument
 .Ar signal
 can be one of:
 .Cm stop , quit , reopen , reload .
-The following table shows the corresponding system signals:
+The following table shows the corresponding system signals.
 .Pp
-.Bl -tag -width ".Cm reopen" -compact
+.Bl -tag -width ".It Cm reopen" -offset indent -compact
 .It Cm stop
 .Dv SIGTERM
 .It Cm quit
@@ -83,10 +84,27 @@ The following table shows the corresponding system signals:
 .Dv SIGHUP
 .El
 .It Fl t
-Do not run, just test the configuration file.
+Don't run, just test the configuration file.
 .Nm
-checks the configuration file syntax and then tries to open files
-referenced in the configuration file.
+checks the configuration file syntax and then tries to open any files
+referred to in the configuration file.
+.It Fl u
+By default
+.Nm
+will
+.Xr chroot 2
+to the home directory of the user running the daemon,
+typically
+.Dq www ,
+or to the home directory of
+.Ic user
+in
+.Pa nginx.conf .
+The
+.Fl u
+option disables this behaviour, and returns
+.Nm
+to the original "unsecure" behaviour.
 .It Fl V
 Print the
 .Nm
@@ -98,12 +116,12 @@ Print the
 .Nm
 version.
 .El
-.Sh SIGNALS
+.Pp
 The master process of
 .Nm
-can handle the following signals:
+can handle the following signals.
 .Pp
-.Bl -tag -width ".Dv SIGINT , SIGTERM" -compact
+.Bl -tag -width ".It Dv SIGINT , SIGTERM" -compact
 .It Dv SIGINT , SIGTERM
 Shut down quickly.
 .It Dv SIGHUP
@@ -121,10 +139,10 @@ executable on the fly.
 Shut down worker processes gracefully.
 .El
 .Pp
-While there is no need to explicitly control worker processes normally,
+While there's no need to explicitly control worker processes normally,
 they support some signals too:
 .Pp
-.Bl -tag -width ".Dv SIGINT , SIGTERM" -compact
+.Bl -tag -width ".It Dv SIGINT , SIGTERM" -compact
 .It Dv SIGTERM
 Shut down quickly.
 .It Dv SIGQUIT
@@ -152,14 +170,8 @@ events {
 	debug_connection 127.0.0.1;
 }
 .Ed
-.Sh ENVIRONMENT
-The
-.Ev NGINX
-environment variable is used internally by
-.Nm
-and should not be set directly by the user.
 .Sh FILES
-.Bl -tag -width indent
+.Bl -tag -width indent -compact
 .It Pa %%PID_PATH%%
 Contains the process ID of
 .Nm .
@@ -170,7 +182,7 @@ The main configuration file.
 Error log file.
 .El
 .Sh EXIT STATUS
-Exit status is 0 on success, or 1 if the command fails.
+.Ex -std nginx
 .Sh EXAMPLES
 Test configuration file
 .Pa ~/mynginx.conf
@@ -183,20 +195,20 @@ nginx -t -c ~/mynginx.conf \e
 .\"Xr nginx.conf 5
 .\"Pp
 Documentation at
-.Pa http://nginx.org/en/docs/ .
+.Lk http://nginx.org/en/docs/ .
 .Pp
 For questions and technical support, please refer to
-.Pa http://nginx.org/en/support.html .
+.Lk http://nginx.org/en/support.html .
 .Sh HISTORY
 Development of
 .Nm
 started in 2002, with the first public release on October 4, 2004.
 .Sh AUTHORS
 .An -nosplit
-.An Igor Sysoev Aq igor@sysoev.ru .
+.An Igor Sysoev Aq Mt igor@sysoev.ru .
 .Pp
-This manual page was originally written by
-.An Sergey A. Osokin Aq osa@FreeBSD.org.ru
+This manual page was written by
+.An Sergey A. Osokin Aq Mt osa@FreeBSD.org.ru
 as a result of compiling many
 .Nm
 documents from all over the world.
