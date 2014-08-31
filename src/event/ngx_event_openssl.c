@@ -859,6 +859,10 @@ ngx_ssl_handshake_handler(ngx_event_t *ev)
 
     c = ev->data;
 
+    /* for client: don't enter if already handshaked */
+    if (c->ssl->buffer && c->ssl->handshaked)
+      return;
+
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0,
                    "SSL handshake handler: %d", ev->write);
 

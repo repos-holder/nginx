@@ -30,7 +30,7 @@ static ngx_int_t ngx_mail_proxy_read_response(ngx_mail_session_t *s,
     ngx_uint_t state);
 static void ngx_mail_proxy_handler(ngx_event_t *ev);
 static void ngx_mail_proxy_upstream_error(ngx_mail_session_t *s);
-static void ngx_mail_proxy_internal_server_error(ngx_mail_session_t *s);
+void ngx_mail_proxy_internal_server_error(ngx_mail_session_t *s);
 static void ngx_mail_proxy_close_session(ngx_mail_session_t *s);
 static void *ngx_mail_proxy_create_conf(ngx_conf_t *cf);
 static char *ngx_mail_proxy_merge_conf(ngx_conf_t *cf, void *parent,
@@ -113,9 +113,11 @@ ngx_mail_proxy_init(ngx_mail_session_t *s, ngx_addr_t *peer)
 {
     int                        keepalive;
     ngx_int_t                  rc;
+    ngx_int_t                  secured = 0;
     ngx_mail_proxy_ctx_t      *p;
     ngx_mail_proxy_conf_t     *pcf;
     ngx_mail_core_srv_conf_t  *cscf;
+    ngx_mail_ssl_conf_t       *sslcf;
 
     s->connection->log->action = "connecting to upstream";
 
@@ -163,6 +165,27 @@ ngx_mail_proxy_init(ngx_mail_session_t *s, ngx_addr_t *peer)
     s->connection->read->handler = ngx_mail_proxy_block_read;
     p->upstream.connection->write->handler = ngx_mail_proxy_dummy_handler;
 
+#if (NGX_MAIL_SSL)
+    if (s->auth_security) {
+        sslcf = ngx_mail_get_module_srv_conf(s, ngx_mail_ssl_module);
+	
+	if (sslcf->ssl.ctx) {
+	  s->connection->log->action = "SSL handshaking";
+
+	  ngx_mail_ssl_init_connection(&sslcf->ssl,
+				       p->upstream.connection,
+				       NGX_MAIL_SECURE_DIR_OUT);
+	  secured = 1;
+	} else {
+	  ngx_log_error(NGX_LOG_ERR, s->connection->log, 0,
+			"failed to get SSL context;");
+	  ngx_mail_proxy_internal_server_error(s);
+
+	  return;
+	}
+    }
+#endif
+
     pcf = ngx_mail_get_module_srv_conf(s, ngx_mail_proxy_module);
 
     s->proxy->buffer = ngx_create_temp_buf(s->connection->pool,
@@ -174,20 +197,30 @@ ngx_mail_proxy_init(ngx_mail_session_t *s, ngx_addr_t *peer)
 
     s->out.len = 0;
 
+    /* state will be changed in the ssl init routine */
+    if (!secured)
+      ngx_mail_proxy_start(p->upstream.connection);
+}
+
+void
+ngx_mail_proxy_start(ngx_connection_t *p)
+{
+    ngx_mail_session_t *s = p->data;
+
     switch (s->protocol) {
 
     case NGX_MAIL_POP3_PROTOCOL:
-        p->upstream.connection->read->handler = ngx_mail_proxy_pop3_handler;
+        p->read->handler = ngx_mail_proxy_pop3_handler;
         s->mail_state = ngx_pop3_start;
         break;
 
     case NGX_MAIL_IMAP_PROTOCOL:
-        p->upstream.connection->read->handler = ngx_mail_proxy_imap_handler;
+        p->read->handler = ngx_mail_proxy_imap_handler;
         s->mail_state = ngx_imap_start;
         break;
 
     default: /* NGX_MAIL_SMTP_PROTOCOL */
-        p->upstream.connection->read->handler = ngx_mail_proxy_smtp_handler;
+        p->read->handler = ngx_mail_proxy_smtp_handler;
         s->mail_state = ngx_smtp_start;
         break;
     }
@@ -703,6 +736,9 @@ static ngx_int_t
 ngx_mail_proxy_read_response(ngx_mail_session_t *s, ngx_uint_t state)
 {
     u_char                 *p;
+#if (NGX_MAIL_HANDLE_GMAIL)
+    u_char                 *ptemp;
+#endif
     ssize_t                 n;
     ngx_buf_t              *b;
     ngx_mail_proxy_conf_t  *pcf;
@@ -767,7 +803,13 @@ ngx_mail_proxy_read_response(ngx_mail_session_t *s, ngx_uint_t state)
             break;
 
         case ngx_imap_passwd:
+#if (NGX_MAIL_HANDLE_GMAIL)
+            /* pass & cut inappropriate unasked CAPABILITY answer */
+            if ((ptemp = ngx_strstrn(p, (char *) s->tag.data, s->tag.len - 1))) {
+		p = ptemp;
+#else
             if (ngx_strncmp(p, s->tag.data, s->tag.len) == 0) {
+#endif
                 p += s->tag.len;
                 if (p[0] == 'O' && p[1] == 'K') {
                     return NGX_OK;
@@ -1022,7 +1064,7 @@ ngx_mail_proxy_upstream_error(ngx_mail_session_t *s)
 }
 
 
-static void
+void
 ngx_mail_proxy_internal_server_error(ngx_mail_session_t *s)
 {
     if (s->proxy->upstream.connection) {

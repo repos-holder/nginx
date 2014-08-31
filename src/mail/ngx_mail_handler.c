@@ -14,7 +14,7 @@
 static void ngx_mail_init_session(ngx_connection_t *c);
 
 #if (NGX_MAIL_SSL)
-static void ngx_mail_ssl_init_connection(ngx_ssl_t *ssl, ngx_connection_t *c);
+void ngx_mail_ssl_init_connection(ngx_ssl_t *ssl, ngx_connection_t *c, ngx_int_t dir);
 static void ngx_mail_ssl_handshake_handler(ngx_connection_t *c);
 #endif
 
@@ -155,7 +155,7 @@ ngx_mail_init_connection(ngx_connection_t *c)
     if (sslcf->enable) {
         c->log->action = "SSL handshaking";
 
-        ngx_mail_ssl_init_connection(&sslcf->ssl, c);
+        ngx_mail_ssl_init_connection(&sslcf->ssl, c, NGX_MAIL_SECURE_DIR_IN);
         return;
     }
 
@@ -171,7 +171,7 @@ ngx_mail_init_connection(ngx_connection_t *c)
             return;
         }
 
-        ngx_mail_ssl_init_connection(&sslcf->ssl, c);
+        ngx_mail_ssl_init_connection(&sslcf->ssl, c, NGX_MAIL_SECURE_DIR_IN);
         return;
     }
 
@@ -199,28 +199,38 @@ ngx_mail_starttls_handler(ngx_event_t *rev)
 
     sslcf = ngx_mail_get_module_srv_conf(s, ngx_mail_ssl_module);
 
-    ngx_mail_ssl_init_connection(&sslcf->ssl, c);
+    ngx_mail_ssl_init_connection(&sslcf->ssl, c, NGX_MAIL_SECURE_DIR_IN);
 }
 
 
-static void
-ngx_mail_ssl_init_connection(ngx_ssl_t *ssl, ngx_connection_t *c)
+void
+ngx_mail_ssl_init_connection(ngx_ssl_t *ssl, ngx_connection_t *c, ngx_int_t dir)
 {
     ngx_mail_session_t        *s;
     ngx_mail_core_srv_conf_t  *cscf;
 
-    if (ngx_ssl_create_connection(ssl, c, 0) == NGX_ERROR) {
+    s = c->data;
+
+    if (dir == NGX_MAIL_SECURE_DIR_IN) {
+      if (ngx_ssl_create_connection(ssl, c, 0) == NGX_ERROR) {
         ngx_mail_close_connection(c);
         return;
+      }
+    } else {
+      if (ngx_ssl_create_connection(ssl, c, NGX_SSL_BUFFER|NGX_SSL_CLIENT)
+	  == NGX_ERROR) {
+        ngx_mail_proxy_internal_server_error(s);
+        return;
+      }      
     }
 
     if (ngx_ssl_handshake(c) == NGX_AGAIN) {
 
-        s = c->data;
-
         cscf = ngx_mail_get_module_srv_conf(s, ngx_mail_core_module);
 
-        ngx_add_timer(c->read, cscf->timeout);
+	/* expected that for upstream, one is set already */
+	if (dir == NGX_MAIL_SECURE_DIR_IN)
+	  ngx_add_timer(c->read, cscf->timeout);
 
         c->ssl->handler = ngx_mail_ssl_handshake_handler;
 
@@ -237,9 +247,9 @@ ngx_mail_ssl_handshake_handler(ngx_connection_t *c)
     ngx_mail_session_t        *s;
     ngx_mail_core_srv_conf_t  *cscf;
 
-    if (c->ssl->handshaked) {
+    s = c->data;
 
-        s = c->data;
+    if (c->ssl->handshaked) {
 
         if (s->starttls) {
             cscf = ngx_mail_get_module_srv_conf(s, ngx_mail_core_module);
@@ -252,13 +262,19 @@ ngx_mail_ssl_handshake_handler(ngx_connection_t *c)
             return;
         }
 
-        c->read->ready = 0;
+	/* temporary: differ client from server via buffer check */
+	if (!c->ssl->buffer) {
+	  c->read->ready = 0;
 
-        ngx_mail_init_session(c);
+	  ngx_mail_init_session(c);
+	} else {
+	  ngx_mail_proxy_start(c);
+	}
         return;
     }
 
-    ngx_mail_close_connection(c);
+    (c->ssl->buffer == 0) ? ngx_mail_close_connection(c) :
+      ngx_mail_proxy_internal_server_error(s);
 }
 
 #endif

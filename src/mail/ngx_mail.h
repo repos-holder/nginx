@@ -218,6 +218,7 @@ typedef struct {
     unsigned                starttls:1;
     unsigned                esmtp:1;
     unsigned                auth_method:3;
+    unsigned                auth_security:1;
     unsigned                auth_wait:1;
 
     ngx_str_t               login;
@@ -312,6 +313,10 @@ typedef struct {
 #define NGX_MAIL_AUTH_CRAM_MD5_ENABLED  0x0010
 #define NGX_MAIL_AUTH_NONE_ENABLED      0x0020
 
+#define NGX_MAIL_SECURE_DIR_IN          0
+#define NGX_MAIL_SECURE_DIR_OUT         1
+
+#define NGX_MAIL_HANDLE_GMAIL           1
 
 #define NGX_MAIL_PARSE_INVALID_COMMAND  20
 
@@ -377,6 +382,7 @@ typedef struct {
 #if (NGX_MAIL_SSL)
 void ngx_mail_starttls_handler(ngx_event_t *rev);
 ngx_int_t ngx_mail_starttls_only(ngx_mail_session_t *s, ngx_connection_t *c);
+void ngx_mail_ssl_init_connection(ngx_ssl_t *ssl, ngx_connection_t *c, ngx_int_t);
 #endif
 
 
@@ -408,6 +414,8 @@ char *ngx_mail_capabilities(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 /* STUB */
 void ngx_mail_proxy_init(ngx_mail_session_t *s, ngx_addr_t *peer);
+void ngx_mail_proxy_start(ngx_connection_t *);
+void ngx_mail_proxy_internal_server_error(ngx_mail_session_t *);
 void ngx_mail_auth_http_init(ngx_mail_session_t *s);
 /**/
 

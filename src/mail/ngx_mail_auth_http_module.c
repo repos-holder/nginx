@@ -590,6 +590,26 @@ ngx_mail_auth_http_process_headers(ngx_mail_session_t *s,
                 continue;
             }
 
+            s->auth_security = 0;
+            if (len == sizeof("Auth-Security") - 1
+                && ngx_strncasecmp(ctx->header_name_start,
+                                   (u_char *) "Auth-Security",
+                                   sizeof("Auth-Security") - 1)
+		   == 0)
+	    {
+#if (NGX_MAIL_SSL)
+	       s->auth_security = 1;
+#else
+	       ngx_log_error(NGX_LOG_WARN, s->connection->log, 0,
+			     "problem while handling \"Auth-Security\" header " \
+			     "sent from auth_http, plain connect to backend will " \
+			     "be used: \"ssl\" requires ngx_mail_ssl_module;");
+
+	       continue;
+#endif
+	    }
+	    
+
             if (len == sizeof("Auth-User") - 1
                 && ngx_strncasecmp(ctx->header_name_start,
                                    (u_char *) "Auth-User",
